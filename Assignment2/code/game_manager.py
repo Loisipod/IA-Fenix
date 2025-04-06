@@ -46,7 +46,6 @@ class TextGameManager:
             if self.display:
                 print(f"========== Turn: {turn+1:3} ==========")
                 print(f"\nChosen action: {action}\n")
-                print(state)
 
             if current_player == 1:
                 self.remaining_time_1 = remaining_time
