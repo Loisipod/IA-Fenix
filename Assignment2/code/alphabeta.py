@@ -5,7 +5,7 @@ from math import sqrt, log, exp
 
 class AlphaBeta(Agent):
     def act(self, state, remaining_time):
-        actions = state.actions()
+        actions = self.filter_capture_actions(state.actions(), state)
         if len(actions) == 1:
             return actions[0]
 
@@ -21,13 +21,17 @@ class AlphaBeta(Agent):
         best_action = None
         alpha = float('-inf')
         beta = float('inf')
+        depth = 3
+
+        #trier les actions par les meilleures d'abord
+        actions.sort(key=lambda a: self.evaluate(state.result(a), player), reverse=True)
 
         for action in actions:
             if time.time() > deadline:
                 break  # on s'arrête dès que le budget est épuisé
 
             child = state.result(action)
-            score = self.min_value(child, alpha, beta, player, deadline)
+            score = self.min_value(child, alpha, beta, player, deadline, depth-1)
 
             if score > best_score:
                 best_score = score
@@ -49,62 +53,99 @@ class AlphaBeta(Agent):
         except:
             return 0.5
 
+    def filter_capture_actions(self, actions, state):  #filtrer les actions (avec règle de capture)
+        max_capture = -1
+        filtered = []
+
+        for action in actions:
+            score = self.capture_score(state, action)
+            if score > max_capture:
+                max_capture = score
+                filtered = [action]
+            elif score == max_capture:
+                filtered.append(action)
+
+        return filtered if max_capture > 0 else actions
+
+    def capture_score(self, state, action): # évaluer combien de pièces sont  capturées par ce coup
+        state.result(action)
+        captured = state.captured_by(action) if hasattr(state, 'captured_by') else []
+        
+        score = 0
+        for pos in captured:
+            value = state.pieces.get(pos, 0)
+            score += self.piece_value(value)
+        return score
 
 
-    def max_value(self, state, alpha, beta, player, deadline):
+    def max_value(self, state, alpha, beta, player, deadline, depth):
         if state.is_terminal():
             return state.utility(player)
-        if time.time() > deadline:
+        if time.time() > deadline or depth == 0:
             return self.evaluate(state, player)
 
         value = float('-inf')
+        actions = self.filter_capture_actions(state.actions(), state)
+        actions.sort(key=lambda a: self.evaluate(state.result(a), player), reverse=True)
         for action in state.actions():
             child = state.result(action)
-            value = max(value, self.min_value(child, alpha, beta, player, deadline))
+            value = max(value, self.min_value(child, alpha, beta, player, deadline, depth-1))
             if value >= beta:
                 return value
             alpha = max(alpha, value)
         return value
 
-    def min_value(self, state, alpha, beta, player, deadline):
+    def min_value(self, state, alpha, beta, player, deadline, depth):
         if state.is_terminal():
             return state.utility(player)
-        if time.time() > deadline:
+        if time.time() > deadline or depth == 0:
             return self.evaluate(state, player)
 
         value = float('inf')
+        actions = self.filter_capture_actions(state.actions(), state)
+        actions.sort(key=lambda a: self.evaluate(state.result(a), -player), reverse=True)
         for action in state.actions():
             child = state.result(action)
-            value = min(value, self.max_value(child, alpha, beta, player, deadline))
+            value = min(value, self.max_value(child, alpha, beta, player, deadline, depth-1))
             if value <= alpha:
                 return value
             beta = min(beta, value)
         return value
 
-    def evaluate(self, state, player):
-        utilities = []
-        piece_values = state.pieces.values()
+    def evaluate(self, state, player): #évalue la position actuelle pour un côté
+        score = 0
+        pieces = state.pieces
 
-        def pieces_count(p):
-            score = 0
-            for value in piece_values:
-                if value * p > 0:
-                    abs_val = abs(value)
-                    if abs_val == 1:
-                        score += 0.1
-                    elif abs_val == 2:
-                        score += 0.2
-                    elif abs_val == 3:
-                        score += 0.7
-            return score
-        utilities.append(pieces_count(player) - pieces_count(-player))
+        for pos, val in pieces.items():
+            if val * player > 0:
+                score += self.piece_value(val)
+                if abs(val) >= 2 and self.is_exposed(state, pos, player):
+                    score -= 1.5 #p^énalité si pièce isolée
+            elif val * player < 0:
+                score -= self.piece_value(val)
 
-        
-        def final_util(utilities):
-            util = 0
-            for a in utilities:
-                util += a
-            return util/len(utilities)
-        
-        
-        return final_util(utilities)
+        def has_king(p):
+            return any(v == 3 * p for v in pieces.values())
+
+        if has_king(player) and not has_king(-player):
+            score += 5
+        elif not has_king(player) and has_king(-player):
+            score -= 5
+
+        return score
+
+    def piece_value(self, val):
+        abs_val = abs(val)
+        if abs_val == 1: return 1
+        elif abs_val == 2: return 2
+        elif abs_val == 3: return 3
+        return 0
+    
+    def is_exposed(self, state, pos, player):
+        x, y = pos
+        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+            neighbor = (x+dx, y+dy)
+            if neighbor in state.pieces and state.pieces[neighbor] * player > 0:
+                return False
+        return True
+
