@@ -5,7 +5,9 @@ from math import sqrt, log, exp
 
 class AlphaBeta(Agent):
     def act(self, state, remaining_time):
-        actions = self.filter_capture_actions(state.actions(), state)
+        if state.is_terminal():
+            return None
+        actions = self.filter_actions(state.actions(), state)
         if len(actions) == 1:
             return actions[0]
 
@@ -13,15 +15,21 @@ class AlphaBeta(Agent):
         player = state.to_move()
 
         # === Allocation dynamique (asymptotique) ===
-        total_time_budget = self.compute_time_budget(remaining_time, num_actions, state.turn)
+        total_time = self.time_check(remaining_time, num_actions, state.turn)
 
-        deadline = time.time() + total_time_budget
+        deadline = time.time() + total_time
 
         best_score = float('-inf')
         best_action = None
         alpha = float('-inf')
         beta = float('inf')
-        depth = 3
+        if num_actions <= 4:
+            depth = 5
+        elif num_actions <= 8:
+            depth = 4
+        else:
+            depth = 3
+
 
         #trier les actions par les meilleures d'abord
         actions.sort(key=lambda a: self.evaluate(state.result(a), player), reverse=True)
@@ -40,7 +48,7 @@ class AlphaBeta(Agent):
 
         return best_action
 
-    def compute_time_budget(self, T_remain, N_actions, turn):
+    def time_check(self, T_remain, N_actions, turn):
         if turn < 10:
             return 2.0  # tours de placement, faible impact stratégique
 
@@ -53,7 +61,7 @@ class AlphaBeta(Agent):
         except:
             return 0.5
 
-    def filter_capture_actions(self, actions, state):  #filtrer les actions (avec règle de capture)
+    def filter_actions(self, actions, state):  #filtrer les actions (avec des règle de capture)
         max_capture = -1
         filtered = []
 
@@ -67,8 +75,8 @@ class AlphaBeta(Agent):
 
         return filtered if max_capture > 0 else actions
 
-    def capture_score(self, state, action): # évaluer combien de pièces sont  capturées par ce coup
-        state.result(action)
+    def capture_score(self, state, action): # évaluer combien de pièces sont capturées
+        result = state.result(action)
         captured = state.captured_by(action) if hasattr(state, 'captured_by') else []
         
         score = 0
@@ -85,9 +93,9 @@ class AlphaBeta(Agent):
             return self.evaluate(state, player)
 
         value = float('-inf')
-        actions = self.filter_capture_actions(state.actions(), state)
+        actions = self.filter_actions(state.actions(), state)
         actions.sort(key=lambda a: self.evaluate(state.result(a), player), reverse=True)
-        for action in state.actions():
+        for action in actions:
             child = state.result(action)
             value = max(value, self.min_value(child, alpha, beta, player, deadline, depth-1))
             if value >= beta:
@@ -102,9 +110,9 @@ class AlphaBeta(Agent):
             return self.evaluate(state, player)
 
         value = float('inf')
-        actions = self.filter_capture_actions(state.actions(), state)
+        actions = self.filter_actions(state.actions(), state)
         actions.sort(key=lambda a: self.evaluate(state.result(a), -player), reverse=True)
-        for action in state.actions():
+        for action in actions:
             child = state.result(action)
             value = min(value, self.max_value(child, alpha, beta, player, deadline, depth-1))
             if value <= alpha:
