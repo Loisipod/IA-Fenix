@@ -132,12 +132,9 @@ class AlphaBeta(Agent):
             elif val * player < 0:
                 score -= self.piece_value(val)
 
-        def has_king(p):
-            return any(v == 3 * p for v in pieces.values())
-
-        if has_king(player) and not has_king(-player):
+        if state._has_king(player) and not state._has_king(-player):
             score += 5
-        elif not has_king(player) and has_king(-player):
+        elif not state._has_king(player) and state._has_king(-player):
             score -= 5
 
         return score
